@@ -2,8 +2,17 @@
 ## 1.文件路径设置
     |- gear_info
            |-- input
+                 # kisssoft pdf
+                 |-- 1.pdf
+                 |-- 2.pdf
+                 ...
            |-- pair
+                 # kisssoft pdf
+                 |-- 1.pdf
+                 |-- 2.pdf
+                 ...
            |-- excel
+           
 ## 2. 脚本介绍
 将kisssoft报告pdf转换为excel表格（.xlsx）
 
