@@ -26,13 +26,13 @@ def extract_gear_parameters_from_pdf(pdf_path):
         '压力角': r'法向压力角.*?\[αn\].*?([\d.]+)',
         '螺旋角': r'分度圆上的螺旋角.*?\[β\].*?([\d]+)',
         '螺旋方向': r'螺旋线方向.*?[\u4e00-\u9fa5]+啮合',
-        '齿顶高系数': r'齿顶高系数.*?\[haP\*\].*?([\d.]+)',
-        '齿根高系数': r'基准齿廓齿根高.*?\[hfP\*\].*?([\d.]+)',
+        '齿顶高系数': r'齿顶高系数.*?\[haP\*\].*?([\d.]+)+([\d.]+)',
+        '齿根高系数': r'基准齿廓齿根高.*?\[hfP\*\].*?([\d.]+)+([\d.]+)',
         '齿廓变位系数': r'齿廓变位系数.*?\[x\].*?([\d.-]+)\s+([-\d.-]+)',
         '齿根圆直径': r'齿根圆直径.*?\[df\].*?([\d.]+)\s+([-\d.]+)',
         '齿顶圆直径': r'齿顶圆直径.*?\[da\].*?([\d.]+)\s+([-\d.]+)',
         '渐开线起始圆': r'齿根成形圆直径.*?\[dFf\].*?([\d.]+)\s+([-\d.]+)',
-        '齿根圆角系数': r'齿根半径系数.*?\[ρfP\*\].*?([\d.]+)',
+        '齿根圆角系数': r'齿根半径系数.*?\[ρfP\*\].*?([\d.]+)+([\d.]+)',
         '中心距': r'中心距.*?\[a\].*?([\d.]+)',
         '跨齿数': r'跨齿数.*?\[k\].*?([\d.]+)\s+([-\d.]+)',
         '量棒直径': r'有效量规直径.*?\[DMeff\].*?([\d.]+)\s+([\d.]+)',
@@ -47,7 +47,7 @@ def extract_gear_parameters_from_pdf(pdf_path):
     for param_name, pattern in patterns.items():
         match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
         if match:
-            if param_name in ['齿数', '齿廓变位系数', '齿根圆直径', '齿顶圆直径', '渐开线起始圆', 
+            if param_name in ['齿数', '齿廓变位系数', '齿根圆直径', '齿顶圆直径', '渐开线起始圆', '齿根高系数','齿根圆角系数',
                             '跨齿数', '量棒直径', '单个齿距偏差', '齿距累计总偏差',
                             '齿廓总偏差', '螺旋线总偏差', '径向跳动偏差']:
                 groups = match.groups()
@@ -55,8 +55,8 @@ def extract_gear_parameters_from_pdf(pdf_path):
                     sun_gear[param_name] = groups[0]
 
                     ring_gear[param_name] = groups[1]
-            elif param_name in ['法向模数', '压力角', '螺旋角', '齿顶高系数', '齿根高系数', 
-                              '齿根圆角系数', '中心距']:
+            elif param_name in ['法向模数', '压力角', '螺旋角', '齿顶高系数',  
+                               '中心距']:
                 sun_gear[param_name] = match.group(1)
 
                 ring_gear[param_name] = match.group(1)
@@ -147,7 +147,9 @@ def extract_gear_parameters_from_pdf(pdf_path):
             ha = float(sun_gear['齿顶高系数'])
             c_value = hf - ha
             sun_gear['顶隙系数'] = f"{c_value:.2f}"
-
+            hf = float(ring_gear['齿根高系数'])
+            ha = float(ring_gear['齿顶高系数'])
+            c_value = hf - ha
             ring_gear['顶隙系数'] = f"{c_value:.2f}"
         except ValueError:
             sun_gear['顶隙系数'] = "0.25"
