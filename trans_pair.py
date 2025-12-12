@@ -32,7 +32,7 @@ def extract_gear_parameters_from_pdf(pdf_path):
         '齿根圆直径': r'齿根圆直径.*?\[df\].*?([\d.]+)\s+([-\d.]+)',
         '齿顶圆直径': r'齿顶圆直径.*?\[da\].*?([\d.]+)\s+([-\d.]+)',
         '渐开线起始圆': r'齿根成形圆直径.*?\[dFf\].*?([\d.]+)\s+([-\d.]+)',
-        '齿根圆角系数': r'齿根半径系数.*?\[ρfP\*\].*?([\d.]+)+([\d.]+)',
+        '齿根圆角系数': r'基准齿廓齿根半径.*?\[ρfP\*\].*?([\d.]+)\s+([\d.]+)',
         '中心距': r'中心距.*?\[a\].*?([\d.]+)',
         '跨齿数': r'跨齿数.*?\[k\].*?([\d.]+)\s+([-\d.]+)',
         '量棒直径': r'有效量规直径.*?\[DMeff\].*?([\d.]+)\s+([\d.]+)',
@@ -65,11 +65,6 @@ def extract_gear_parameters_from_pdf(pdf_path):
 
                 ring_gear[param_name] = '直齿'
     
-    # 处理行星轮数量
-
-
-
-    
     # 处理公法线长度（太阳轮和行星轮）
     w_pattern = r'\[Wk\.e/i\].*?([\d.]+)\s+/\s+([\d.]+)\s+'
     sun_w_match = re.search(w_pattern, text)
@@ -79,11 +74,15 @@ def extract_gear_parameters_from_pdf(pdf_path):
         
     if sun_w_match:
         remaining_text = text[sun_w_match.end():]
-
-
-
-
-
+        ring_pattern = r'([\d.]+)\s+/([\d.]+)'
+        ring_w_match = re.search(ring_pattern, remaining_text)
+        if ring_w_match:
+            try:            
+                ring_gear['公法线长度_Wmax'] = ring_w_match.group(1)
+                ring_gear['公法线长度_Wmin'] = ring_w_match.group(2)
+            except:
+                ring_gear['公法线长度_Wmax'] = 0
+                ring_gear['公法线长度_Wmin'] = 0
 
     # 处理齿顶圆公差带
     da_pattern = r'\[da\.e/i\].*?([\d.]+)\s+/\s+([\d.]+)'
@@ -129,8 +128,6 @@ def extract_gear_parameters_from_pdf(pdf_path):
         ring_gear['跨棒距_max'] = md_match.group(1)
         ring_gear['跨棒距_min'] = md_match.group(2)
     
-    
-
     # 如果没有找到齿廓变位系数，尝试从产形齿廓变位系数中提取（作为备选）
     if '齿廓变位系数' not in sun_gear:
         backup_pattern = r'产形齿廓变位系数.*?\[xE e/i\].*?([\d.-]+).*?([\d.-]+)'
@@ -273,25 +270,29 @@ def extract_gear_parameters_from_pdf(pdf_path):
         return gear_params
     
     # 特殊处理：齿圈没有跨齿数，太阳轮和行星轮没有跨棒距和量棒直径
-    if '跨齿数' in ring_gear:
-        del ring_gear['跨齿数']
+    if '-' in ring_gear['齿数']:
+        if '跨齿数' in ring_gear:
+            del ring_gear['跨齿数']
+        if '公法线长度_Wmax' in ring_gear:
+            del ring_gear['公法线长度_Wmax']
+            del ring_gear['公法线长度_Wmin']
+    else:
+        if '跨棒距_max' and '量棒直径' in ring_gear:
+            del ring_gear['跨棒距_max']
+            del ring_gear['跨棒距_min']
+            del ring_gear['量棒直径']
+
+
     if '跨棒距_max' in sun_gear:
         del sun_gear['跨棒距_max']
         del sun_gear['跨棒距_min']
-
-
-
-    if '公法线长度_Wmax' in ring_gear:
-        del ring_gear['公法线长度_Wmax']
-        del ring_gear['公法线长度_Wmin']
     if '量棒直径' in sun_gear:
         del sun_gear['量棒直径']
 
 
     
     sun_data = create_gear_data(sun_gear, '太阳轮')
-
-    ring_data = create_gear_data(ring_gear, '齿圈')
+    
     
     # 修改列名为指定的名称
     def rename_columns(data, sheet_name):
@@ -303,8 +304,12 @@ def extract_gear_parameters_from_pdf(pdf_path):
         return df
     
     sun_df = rename_columns(sun_data, '太阳轮')
-
-    ring_df = rename_columns(ring_data, '齿圈')
+    if '-' in ring_gear['齿数']:
+        ring_data = create_gear_data(ring_gear, '齿圈')
+        ring_df = rename_columns(ring_data, '齿圈')
+    else:
+        ring_data = create_gear_data(ring_gear, '行星轮')
+        ring_df = rename_columns(ring_data, '行星轮')
     
     return sun_df,  ring_df
 
@@ -338,7 +343,7 @@ def process_all_pdfs(input_dir="./pair", output_dir="./excel"):
             # 保存为Excel文件
             with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
                 sun_df.to_excel(writer, sheet_name='太阳轮', index=False)
-                ring_df.to_excel(writer, sheet_name='齿圈', index=False)
+                ring_df.to_excel(writer, sheet_name='轮2', index=False)
             
             print(f"成功输出: {excel_name}")
             
