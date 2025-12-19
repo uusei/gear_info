@@ -118,13 +118,18 @@ def extract_gear_parameters_from_pdf(pdf_path):
                 planet_gear['齿顶公差范围'] = 0
         if planet_da_match:
             remaining_text = text[planet_da_match.end():]
-            ring_pattern = r'([\d.]+)\s+/([\d.]+)'
+            ring_pattern = r'\[Ada\.e/i\].*?([\d.]+)'
             ring_da_match = re.search(ring_pattern, remaining_text)
-            if ring_da_match:
+            remaining_text1 = remaining_text[ring_da_match.end():]
+            ring_da_match1 = re.search(ring_pattern, remaining_text1)
+            remaining_text2 = remaining_text1[ring_da_match1.end():]
+            ring_da_match2 = re.search(ring_pattern, remaining_text2)
+            remaining_text2 = remaining_text2[ring_da_match1.end():]
+            
+            if ring_da_match2:
                 try:
-                    ring_da_max = float(ring_da_match.group(1))
-                    ring_da_min = float(ring_da_match.group(2))
-                    ring_gear['齿顶公差范围'] = ring_da_max - ring_da_min
+                    ring_da_max = float(ring_da_match2.group(1))
+                    ring_gear['齿顶公差范围'] = ring_da_max
                 except:
                     ring_gear['齿顶公差范围'] = 0
 
