@@ -8,7 +8,7 @@ equation set as follow
 
  ### $i=1+\frac{Z_b}{Z_a}$ 
 
-which $Z$ means number  of teeth，$i$ means gear ratio
+which $Z$ means number  of teeth， $i$ means gear ratio
 
   ![传动比ngw](https://pic4.zhimg.com/v2-0e90410554d6828a3b9566ed77401fcb.jpg)
 
