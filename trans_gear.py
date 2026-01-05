@@ -76,6 +76,11 @@ def extract_gear_parameters_from_pdf(pdf_path):
     if sun_w_match:
         sun_gear['公法线长度_Wmax'] = sun_w_match.group(1)
         sun_gear['公法线长度_Wmin'] = sun_w_match.group(2)
+    else:
+        w_pattern = r'\[Wk\.e/i\].*?([\d.]+)\s+/([\d.]+)\s+'
+        sun_w_match = re.search(w_pattern, text)
+        sun_gear['公法线长度_Wmax'] = sun_w_match.group(1)
+        sun_gear['公法线长度_Wmin'] = sun_w_match.group(2)
         
     if sun_w_match:
         remaining_text = text[sun_w_match.end():]
@@ -134,18 +139,22 @@ def extract_gear_parameters_from_pdf(pdf_path):
                     ring_gear['齿顶公差范围'] = 0
 
     # 处理跨棒距（齿圈）- 径向二针跨球距
-    md_pattern = r'\[MdK\.e/i\].*?([\d.]+)\s+/([\d.]+)'
+    md_pattern = r'径向二针跨球距.*?\[MdK\.e/i\].*?([\d.]+)\s+/\s+([\d.]+)'
     md_match = re.search(md_pattern, text)
+    if not md_match:
+        md_pattern = r'径向二针跨球距.*?\[MdK\.e/i\].*?([\d.]+)\s+/([\d.]+)'
+        md_match = re.search(md_pattern, text)
+    
     remaining_text = text[md_match.end():]
-    md_pattern = r'([\d.]+)\s+/([\d.]+)'
-    md_match = re.search(md_pattern, remaining_text)
-    remaining_text = remaining_text[md_match.end():]
-    md_pattern = r'([\d.]+)\s+/([\d.]+)'
-    md_match = re.search(md_pattern, remaining_text)
+    md_pattern1 = r'([\d.]+)\s+/([\d.]+)'
+    md_match1 = re.search(md_pattern1, remaining_text)
+    remaining_text1 = remaining_text[md_match1.end():]
+    md_pattern2 = r'([\d.]+)\s+/([\d.]+)'
+    md_match2 = re.search(md_pattern2, remaining_text1)
 
-    if md_match:
-        ring_gear['跨棒距_max'] = md_match.group(1)
-        ring_gear['跨棒距_min'] = md_match.group(2)
+    if md_match2:
+        ring_gear['跨棒距_max'] = md_match2.group(1)
+        ring_gear['跨棒距_min'] = md_match2.group(2)
     
     
 
