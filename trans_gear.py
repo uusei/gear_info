@@ -351,7 +351,7 @@ def process_all_pdfs(input_dir="./input", output_dir="./excel"):
         os.makedirs(output_dir)
     
     # 获取所有PDF文件
-    pdf_files = [f for f in os.listdir(input_dir) if f.lower().endswith('.pdf')]
+    pdf_files = [f for f in os.listdir(input_dir) if f.lower().endswith('.pdf') and f.lower().startswith('gear')]
     
     if not pdf_files:
         print(f"在 {input_dir} 文件夹中未找到PDF文件")
