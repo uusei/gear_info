@@ -84,8 +84,17 @@ def extract_gear_parameters_from_pdf(pdf_path):
         
     if sun_w_match:
         remaining_text = text[sun_w_match.end():]
-        planet_w_pattern = r'([\d.]+)\s+/\s+([\d.]+)'
+        planet_w_pattern = r'([\d.]+)'
         planet_w_match = re.search(planet_w_pattern, remaining_text)
+        if float(planet_w_match.group(1))>=10:
+            planet_w_pattern = r'([\d.]+)\s+/([\d.]+)'
+            planet_w_match = re.search(planet_w_pattern, remaining_text)
+        elif float(planet_w_match.group(1))>0 and float(planet_w_match.group(1))<10:
+            planet_w_pattern = r'([\d.]+)\s+/\s+([\d.]+)'
+            planet_w_match = re.search(planet_w_pattern, remaining_text)
+        else:
+            planet_w_match=None
+
         if planet_w_match:
             planet_gear['公法线长度_Wmax'] = planet_w_match.group(1)
             planet_gear['公法线长度_Wmin'] = planet_w_match.group(2)
@@ -123,12 +132,12 @@ def extract_gear_parameters_from_pdf(pdf_path):
                 planet_gear['齿顶公差范围'] = 0
         if planet_da_match:
             remaining_text = text[planet_da_match.end():]
-            ring_pattern = r'\[Ada\.e/i\].*?([\d.]+)'
-            ring_da_match = re.search(ring_pattern, remaining_text)
+            planet_w_pattern = r'\[Ada\.e/i\].*?([\d.]+)'
+            ring_da_match = re.search(planet_w_pattern, remaining_text)
             remaining_text1 = remaining_text[ring_da_match.end():]
-            ring_da_match1 = re.search(ring_pattern, remaining_text1)
+            ring_da_match1 = re.search(planet_w_pattern, remaining_text1)
             remaining_text2 = remaining_text1[ring_da_match1.end():]
-            ring_da_match2 = re.search(ring_pattern, remaining_text2)
+            ring_da_match2 = re.search(planet_w_pattern, remaining_text2)
             remaining_text2 = remaining_text2[ring_da_match1.end():]
             
             if ring_da_match2:
@@ -144,19 +153,38 @@ def extract_gear_parameters_from_pdf(pdf_path):
     if not md_match:
         md_pattern = r'径向二针跨球距.*?\[MdK\.e/i\].*?([\d.]+)\s+/([\d.]+)'
         md_match = re.search(md_pattern, text)
-    
-    remaining_text = text[md_match.end():]
-    md_pattern1 = r'([\d.]+)\s+/([\d.]+)'
-    md_match1 = re.search(md_pattern1, remaining_text)
-    remaining_text1 = remaining_text[md_match1.end():]
-    md_pattern2 = r'([\d.]+)\s+/([\d.]+)'
-    md_match2 = re.search(md_pattern2, remaining_text1)
+        
+    md_match1=None    
+
+    if md_match:
+        remaining_text = text[md_match.end():]
+        md_pattern = r'([\d.]+)'
+        md_match = re.search(md_pattern, remaining_text)
+        if float(md_match.group(1))>=10:
+            md_pattern = r'([\d.]+)\s+/([\d.]+)'
+            md_match1 = re.search(md_pattern, remaining_text)
+        elif float(md_match.group(1))>0 and float(md_match.group(1))<10:
+            md_pattern = r'([\d.]+)\s+/\s+([\d.]+)'
+            md_match1 = re.search(md_pattern, remaining_text)
+        else:
+            md_match1=None
+
+    if md_match1:
+        remaining_text1 = remaining_text[md_match1.end():]
+        md_pattern = r'([\d.]+)'
+        md_match = re.search(md_pattern, remaining_text1)
+        if float(md_match.group(1)) >= 10:
+            md_pattern = r'([\d.]+)\s+/([\d.]+)'
+            md_match2 = re.search(md_pattern, remaining_text1)
+        elif float(md_match.group(1)) > 0 and float(md_match.group(1)) < 10:
+            md_pattern = r'([\d.]+)\s+/\s+([\d.]+)'
+            md_match2 = re.search(md_pattern, remaining_text1)
+        else:
+            md_match2 = None
 
     if md_match2:
         ring_gear['跨棒距_max'] = md_match2.group(1)
         ring_gear['跨棒距_min'] = md_match2.group(2)
-    
-    
 
     # 如果没有找到齿廓变位系数，尝试从产形齿廓变位系数中提取（作为备选）
     if '齿廓变位系数' not in sun_gear:

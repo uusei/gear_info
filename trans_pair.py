@@ -79,8 +79,17 @@ def extract_gear_parameters_from_pdf(pdf_path):
         
     if sun_w_match:
         remaining_text = text[sun_w_match.end():]
-        ring_pattern = r'([\d.]+)\s+/([\d.]+)'
+        ring_pattern = r'([\d.]+)'
         ring_w_match = re.search(ring_pattern, remaining_text)
+        if float(ring_w_match.group(1))>=10:
+            ring_pattern = r'([\d.]+)\s+/([\d.]+)'
+            ring_w_match = re.search(ring_pattern, remaining_text)
+        elif float(ring_w_match.group(1))>0 and float(ring_w_match.group(1))<10:
+            ring_pattern = r'([\d.]+)\s+/\s+([\d.]+)'
+            ring_w_match = re.search(ring_pattern, remaining_text)
+        else:
+            ring_w_match=None
+
         if ring_w_match:
             try:            
                 ring_gear['公法线长度_Wmax'] = ring_w_match.group(1)
@@ -88,6 +97,8 @@ def extract_gear_parameters_from_pdf(pdf_path):
             except:
                 ring_gear['公法线长度_Wmax'] = 0
                 ring_gear['公法线长度_Wmin'] = 0
+
+
 
     # 处理齿顶圆公差带
     da_pattern = r'\[da\.e/i\].*?([\d.]+)\s+/\s+([\d.]+)'
@@ -129,8 +140,16 @@ def extract_gear_parameters_from_pdf(pdf_path):
         md_match = re.search(md_pattern, text)
     remaining_text = text[md_match.end():]
     
-    md_pattern = r'([\d.]+)\s+/([\d.]+)'
+    md_pattern = r'([\d.]+)'
     md_match = re.search(md_pattern, remaining_text)
+    if float(md_match.group(1))>=10:
+        md_pattern = r'([\d.]+)\s+/([\d.]+)'
+        md_match = re.search(md_pattern, remaining_text)
+    elif float(md_match.group(1))>0 and float(md_match.group(1))<10:
+        md_pattern = r'([\d.]+)\s+/\s+([\d.]+)'
+        md_match = re.search(md_pattern, remaining_text)
+    else:
+        md_match=None
 
     if md_match:
         ring_gear['跨棒距_max'] = md_match.group(1)
