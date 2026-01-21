@@ -84,7 +84,7 @@ def extract_gear_parameters_from_pdf(pdf_path):
         
     if sun_w_match:
         remaining_text = text[sun_w_match.end():]
-        planet_w_pattern = r'([\d.]+)'
+        planet_w_pattern = r'\[Wk\.e/i\].*?([\d.]+)'
         planet_w_match = re.search(planet_w_pattern, remaining_text)
         if float(planet_w_match.group(1))>=10:
             planet_w_pattern = r'([\d.]+)\s+/([\d.]+)'
@@ -158,7 +158,7 @@ def extract_gear_parameters_from_pdf(pdf_path):
 
     if md_match:
         remaining_text = text[md_match.end():]
-        md_pattern = r'([\d.]+)'
+        md_pattern = r'\[MdK\.e/i\].*?([\d.]+)'
         md_match = re.search(md_pattern, remaining_text)
         if float(md_match.group(1))>=10:
             md_pattern = r'([\d.]+)\s+/([\d.]+)'
@@ -171,7 +171,7 @@ def extract_gear_parameters_from_pdf(pdf_path):
 
     if md_match1:
         remaining_text1 = remaining_text[md_match1.end():]
-        md_pattern = r'([\d.]+)'
+        md_pattern = r'\[MdK\.e/i\].*?([\d.]+)'
         md_match = re.search(md_pattern, remaining_text1)
         if float(md_match.group(1)) >= 10:
             md_pattern = r'([\d.]+)\s+/([\d.]+)'
