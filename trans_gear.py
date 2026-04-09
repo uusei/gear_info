@@ -253,25 +253,24 @@ def extract_gear_parameters_from_pdf(pdf_path):
     
     # 构建标准化的数据结构
     def create_gear_data(gear_dict, gear_type):
-        # 齿轮参数部分
+        # 齿轮参数部分表格内容
         gear_params = {
             '参数名称': [],
             '符号': [],
             '数值': []
         }
-        
-        # 基本参数映射
+
+        # 主参数映射（去除齿顶圆直径、数量）
         param_mapping = {
             '齿数': ('Z', '齿数', 'gear'),
             '法向模数': ('mn', '法向模数', 'gear'),
-            '压力角': ('ɑ', '压力角', 'gear'),
+            '压力角': ('α', '压力角', 'gear'),
             '螺旋角': ('β', '螺旋角', 'gear'),
             '螺旋方向': ('', '螺旋方向', 'gear'),
             '齿顶高系数': ('ha*', '齿顶高系数', 'gear'),
             '顶隙系数': ('C*', '顶隙系数', 'gear'),
             '齿廓变位系数': ('x', '径向变位系数', 'gear'),
             '齿根圆直径': ('df', '齿根圆直径', 'gear'),
-            '齿顶圆直径': ('da', '齿顶圆直径', 'gear'),
             '渐开线起始圆': ('dFf', '渐开线起始圆', 'gear'),
             '齿根圆角系数': ('rhofP*', '齿根圆角系数', 'gear'),
             '中心距': ('a', '中心距', 'gear'),
@@ -283,10 +282,15 @@ def extract_gear_parameters_from_pdf(pdf_path):
             '公法线长度_Wmin': ('Wmin', '', 'gear'),
             '量棒直径': ('DM', '量棒直径', 'gear'),
             '跨棒距_max': ('Mmax', '跨棒距', 'gear'),
-            '跨棒距_min': ('Mmin', '', 'gear'),
-            '数量': ('', '数量', 'gear')
-            
+            '跨棒距_min': ('Mmin', '', 'gear')
         }
+
+        # 其它参数单独映射
+        others_mapping = {
+            '齿顶圆直径': ('da', '齿顶圆直径', 'gear'),
+            '数量': ('', '数量', 'gear')
+        }
+        
         
         # 精度参数映射
         accuracy_mapping = {
@@ -298,13 +302,12 @@ def extract_gear_parameters_from_pdf(pdf_path):
             '齿顶公差范围': ('', '齿顶公差范围', 'accuracy')
         }
         
-        # 处理齿轮参数
+        # 先处理主参数
         for param_key, (symbol, display_name, param_type) in param_mapping.items():
             if param_type == 'gear':
                 # 太阳轮和行星轮没有量棒直径
                 if gear_type in ['太阳轮', '行星轮'] and param_key == '量棒直径':
                     continue
-                    
                 if param_key in gear_dict:
                     formatted_value = format_value(gear_dict[param_key], display_name)
                     gear_params['参数名称'].append(display_name)
@@ -315,12 +318,14 @@ def extract_gear_parameters_from_pdf(pdf_path):
                     gear_params['参数名称'].append(display_name)
                     gear_params['符号'].append(symbol)
                     gear_params['数值'].append('')
+
+        # 精度参数同原逻辑
         
         # 添加齿轮精度标题
         gear_params['参数名称'].append('齿轮精度')
         gear_params['符号'].append('')
         gear_params['数值'].append('')
-        
+
         # 处理齿轮精度参数
         for param_key, (symbol, display_name, param_type) in accuracy_mapping.items():
             if param_type == 'accuracy' and param_key in gear_dict:
@@ -328,7 +333,16 @@ def extract_gear_parameters_from_pdf(pdf_path):
                 gear_params['参数名称'].append(display_name)
                 gear_params['符号'].append(symbol)
                 gear_params['数值'].append(formatted_value)
-        
+
+        # others_mapping内容插入，顺序为齿顶圆直径、数量
+        for key in ['齿顶圆直径', '数量']:
+            symbol, display_name, _ = others_mapping[key]
+            if key in gear_dict:
+                formatted_value = format_value(gear_dict[key], display_name)
+                gear_params['参数名称'].append(display_name)
+                gear_params['符号'].append(symbol)
+                gear_params['数值'].append(formatted_value)
+
         return gear_params
     
     # 特殊处理：齿圈没有跨齿数，太阳轮和行星轮没有跨棒距和量棒直径
@@ -399,9 +413,71 @@ def process_all_pdfs(input_dir="./input", output_dir="./excel"):
                 sun_df.to_excel(writer, sheet_name='太阳轮', index=False)
                 planet_df.to_excel(writer, sheet_name='行星轮', index=False)
                 ring_df.to_excel(writer, sheet_name='齿圈', index=False)
-            
+            # ========== 自动列宽与居中设置，详细中文注释 ==========
+            from openpyxl.styles import Alignment
+            from openpyxl.utils import get_column_letter
+            import openpyxl
+            wb = openpyxl.load_workbook(output_path)
+            for sheet_name in wb.sheetnames:
+                ws = wb[sheet_name]
+                # 1. 遍历所有单元格，设置水平和垂直居中
+                for row in ws.iter_rows():
+                    for cell in row:
+                        cell.alignment = Alignment(horizontal='center', vertical='center')
+                # 2. 获取表头（第一行），用于判断每一列的类型
+                header = [cell.value for cell in next(ws.iter_rows(min_row=1, max_row=1))]
+                for idx, col in enumerate(ws.columns, 0):
+                    max_length = 0
+                    col_letter = get_column_letter(col[0].column)
+                    # 3. 遍历本列所有单元格，取最大内容宽度
+                    for cell in col:
+                        try:
+                            value = str(cell.value) if cell.value is not None else ''
+                            if len(value) > max_length:
+                                max_length = len(value)
+                                # print(f"列 {col_letter} 当前最大内容宽度: {max_length} (单元格 {cell.coordinate} 内容: '{value}')")
+                        except Exception:
+                            pass
+                    # 4. 判断列名，决定列宽加宽策略
+                    if idx < len(header):
+                        col_name = header[idx]
+                        # “参数名称”类列名，列宽=最大内容宽度+4
+                        if col_name in ['参数名称', '齿轮参数', '齿圈参数', '参数', '参数名', '参数项']:
+                            ws.column_dimensions[col_letter].width = max_length + 7
+                        # “数值”类列名，列宽=最大内容宽度+2
+                        elif col_name in ['数值', '值', '参数值']:
+                            ws.column_dimensions[col_letter].width = 9
+                        else:
+                            # 其它列默认+2
+                            ws.column_dimensions[col_letter].width = max_length + 2
+                    else:
+                        ws.column_dimensions[col_letter].width = max_length + 2
+                # ======= 列宽计算完成后再执行合并操作，避免合并影响列宽判断 =======
+                # 合并顶行大标题（方案A）：如果首列为分组标题，则合并 A1:C1 并居中
+                try:
+                    first_val = ws.cell(1, 1).value
+                    if first_val in ['齿轮参数', '齿圈参数', '参数名称']:
+                        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=3)
+                        ws.cell(1, 1).alignment = Alignment(horizontal='center', vertical='center')
+                        ws.cell(1, 2).value = None
+                        ws.cell(1, 3).value = None
+                except Exception:
+                    pass
+
+                # 遍历数据区，遇到分组标题如 '齿轮精度' 时合并该行 A-C 并居中
+                try:
+                    for r in range(1, ws.max_row + 1):
+                        v = ws.cell(r, 1).value
+                        if v == '齿轮精度':
+                            ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=3)
+                            ws.cell(r, 1).alignment = Alignment(horizontal='center', vertical='center')
+                            ws.cell(r, 2).value = None
+                            ws.cell(r, 3).value = None
+                except Exception:
+                    pass
+            wb.save(output_path)
+            # ========== 以上代码实现了所有单元格内容居中和自动调整列宽 ==========
             print(f"成功输出: {excel_name}")
-            
         except Exception as e:
             print(f"处理文件 {pdf_file} 时出错: {str(e)}")
 
