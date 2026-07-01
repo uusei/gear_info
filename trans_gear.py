@@ -4,6 +4,84 @@ import pandas as pd
 import re
 from openpyxl import Workbook
 
+
+def extract_strength_triplet(text, aliases, exclude_aliases=None):
+    """
+    从 PDF 文本中按行提取三列强度值。
+    支持单值和“a/b”这类双值文本，抽不到时返回空字符串。
+    """
+    number_pattern = r'[-+]?\d+(?:\.\d+)?(?:\s*/\s*[-+]?\d+(?:\.\d+)?)?'
+    normalized_aliases = [re.sub(r'\s+', '', alias) for alias in aliases]
+    normalized_exclude_aliases = [re.sub(r'\s+', '', alias) for alias in (exclude_aliases or [])]
+
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        compact_line = re.sub(r'\s+', '', line)
+        if not line or not any(alias in compact_line for alias in normalized_aliases):
+            continue
+        if any(alias in compact_line for alias in normalized_exclude_aliases):
+            continue
+
+        values = re.findall(number_pattern, line)
+        if len(values) >= 3:
+            return values[0], values[1], values[2]
+
+    return '', '', ''
+
+
+def extract_value_pairs_near_label(text, label, expected_count, end_labels=None):
+    """
+    以参数标签为锚点截取局部窗口，再提取顺序数对。
+    这样不依赖章节标题 OCR，也能避免全文顺序扫描串读。
+    """
+    anchor_match = re.search(rf'\[{re.escape(label)}\]', text, re.IGNORECASE)
+    if not anchor_match:
+        return []
+
+    start_index = max(0, anchor_match.start() - 200)
+    end_index = len(text)
+    for end_label in end_labels or []:
+        end_match = re.search(re.escape(end_label), text[anchor_match.end():], re.IGNORECASE)
+        if end_match:
+            candidate_end = anchor_match.end() + end_match.start()
+            if candidate_end < end_index:
+                end_index = candidate_end
+
+    section_text = text[start_index:end_index]
+
+    pair_pattern = re.compile(
+        rf'\[{re.escape(label)}\].*?([-+]?\d+(?:\.\d+)?)\s*/\s*([-+]?\d+(?:\.\d+)?)',
+        re.IGNORECASE | re.DOTALL
+    )
+    matches = pair_pattern.findall(section_text)
+    return matches[:expected_count]
+
+
+def create_strength_summary_df(sun_gear, planet_gear, ring_gear):
+    """
+    构造强度汇总 sheet，按“指标为行、齿轮类型为列”输出。
+    """
+    strength_rows = [
+        ('齿根应力安全系数 SF', '齿根应力安全系数_SF'),
+        ('接触应力安全系数 SHBD', '接触应力安全系数_SH'),
+        ('总重合度 εγ', '总重合度_εγ')
+    ]
+
+    summary_data = {
+        '强度指标': [],
+        '太阳轮': [],
+        '行星轮': [],
+        '齿圈': []
+    }
+
+    for display_name, data_key in strength_rows:
+        summary_data['强度指标'].append(display_name)
+        summary_data['太阳轮'].append(sun_gear.get(data_key, ''))
+        summary_data['行星轮'].append(planet_gear.get(data_key, ''))
+        summary_data['齿圈'].append(ring_gear.get(data_key, ''))
+
+    return pd.DataFrame(summary_data)
+
 def extract_gear_parameters_from_pdf(pdf_path):
     """
     从PDF文件中提取齿轮参数
@@ -12,7 +90,7 @@ def extract_gear_parameters_from_pdf(pdf_path):
     text = ""
     with pdfplumber.open(pdf_path) as pdf:
         for page in pdf.pages:
-            text += page.extract_text() + "\n"
+            text += (page.extract_text() or "") + "\n"
     
     # 初始化三个齿轮的数据字典
     sun_gear = {}
@@ -33,6 +111,7 @@ def extract_gear_parameters_from_pdf(pdf_path):
         '齿顶圆直径': r'齿顶圆直径.*?\[da\].*?([\d.]+)\s+([\d.]+)\s+([-\d.]+)',
         '渐开线起始圆': r'齿根成形圆直径.*?\[dFf\].*?([\d.]+)\s+([\d.]+)\s+([-\d.]+)',
         '齿根圆角系数': r'基准齿廓齿根半径.*?\[ρfP\*\].*?([\d.]+)\s+([\d.]+)\s+([\d.]+)',
+        '齿宽': r'齿宽.*?\[b\].*?([\d.]+)\s+([\d.]+)\s+([\d.]+)',
         '中心距': r'中心距.*?\[a\].*?([\d.]+)',
         '跨齿数': r'跨齿数.*?\[k\].*?([\d.]+)\s+([\d.]+)\s+([-\d.]+)',
         '量棒直径': r'有效量规直径.*?\[DMeff\].*?([\d.]+)\s+([\d.]+)\s+([\d.]+)',
@@ -42,12 +121,11 @@ def extract_gear_parameters_from_pdf(pdf_path):
         '螺旋线总偏差': r'螺旋线总偏差的公差.*?\[FβT\].*?([\d.]+)\s+([\d.]+)\s+([\d.]+)',
         '径向跳动偏差': r'径跳偏差的公差.*?\[FrT\].*?([\d.]+)\s+([\d.]+)\s+([\d.]+)'
     }
-    
     # 提取数据
     for param_name, pattern in patterns.items():
         match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
         if match:
-            if param_name in ['齿数', '齿廓变位系数', '齿根圆直径', '齿顶圆直径', '渐开线起始圆', '齿根高系数','齿根圆角系数',
+            if param_name in ['齿数', '齿廓变位系数', '齿根圆直径', '齿顶圆直径', '渐开线起始圆', '齿根高系数','齿根圆角系数', '齿宽',
                             '跨齿数', '量棒直径', '单个齿距偏差', '齿距累计总偏差',
                             '齿廓总偏差', '螺旋线总偏差', '径向跳动偏差']:
                 groups = match.groups()
@@ -69,35 +147,60 @@ def extract_gear_parameters_from_pdf(pdf_path):
     planet_count_match = re.search(r'齿轮数量.*?\[p\].*?1\s+(\d+)\s+1', text)
     if planet_count_match:
         planet_gear['数量'] = planet_count_match.group(1)
-    
-    # 处理公法线长度（太阳轮和行星轮）
-    w_pattern = r'\[Wk\.e/i\].*?([\d.]+)\s+/\s+([\d.]+)\s+'
-    sun_w_match = re.search(w_pattern, text)
-    if sun_w_match:
-        sun_gear['公法线长度_Wmax'] = sun_w_match.group(1)
-        sun_gear['公法线长度_Wmin'] = sun_w_match.group(2)
-    else:
-        w_pattern = r'\[Wk\.e/i\].*?([\d.]+)\s+/([\d.]+)\s+'
-        sun_w_match = re.search(w_pattern, text)
-        sun_gear['公法线长度_Wmax'] = sun_w_match.group(1)
-        sun_gear['公法线长度_Wmin'] = sun_w_match.group(2)
-        
-    if sun_w_match:
-        remaining_text = text[sun_w_match.end():]
-        planet_w_pattern = r'\[Wk\.e/i\].*?([\d.]+)'
-        planet_w_match = re.search(planet_w_pattern, remaining_text)
-        if float(planet_w_match.group(1))>=10:
-            planet_w_pattern = r'([\d.]+)\s+/([\d.]+)'
-            planet_w_match = re.search(planet_w_pattern, remaining_text)
-        elif float(planet_w_match.group(1))>0 and float(planet_w_match.group(1))<10:
-            planet_w_pattern = r'([\d.]+)\s+/\s+([\d.]+)'
-            planet_w_match = re.search(planet_w_pattern, remaining_text)
-        else:
-            planet_w_match=None
 
-        if planet_w_match:
-            planet_gear['公法线长度_Wmax'] = planet_w_match.group(1)
-            planet_gear['公法线长度_Wmin'] = planet_w_match.group(2)
+    # 处理强度汇总指标，按 PDF 表格行抽取三列数据
+    strength_mapping = {
+        '齿根应力安全系数_SF': {
+            'aliases': ['齿根应力安全系数', 'SF=σFG/σF'],
+            'exclude_aliases': ['SFmin', '目标安全系数', '齿根目标安全系数']
+        },
+        '接触应力安全系数_SH': {
+            'aliases': ['单对齿啮合齿面接触应力安全系数', 'SHBD=σHG/σHBD', '[SHBD'],
+            'exclude_aliases': ['SHmin', 'SHw', '(SHBD)²', '目标安全系数', '齿面目标安全系数']
+        }
+    }
+    for field_name, rule in strength_mapping.items():
+        sun_value, planet_value, ring_value = extract_strength_triplet(
+            text,
+            rule['aliases'],
+            rule.get('exclude_aliases')
+        )
+        if sun_value or planet_value or ring_value:
+            sun_gear[field_name] = sun_value
+            planet_gear[field_name] = planet_value
+            ring_gear[field_name] = ring_value
+
+    # 总重合度是啮合副指标。样例中两值分别对应太阳轮-行星轮和行星轮-齿圈。
+    total_contact_ratio_match = re.search(r'总重合度.*?\[εγ\].*?([-+]?\d+(?:\.\d+)?)\s+([-+]?\d+(?:\.\d+)?)', text)
+    if total_contact_ratio_match:
+        first_mesh_value = total_contact_ratio_match.group(1)
+        second_mesh_value = total_contact_ratio_match.group(2)
+        sun_gear['总重合度_εγ'] = first_mesh_value
+        planet_gear['总重合度_εγ'] = f'{first_mesh_value} / {second_mesh_value}'
+        ring_gear['总重合度_εγ'] = second_mesh_value
+    
+    # 围绕首个 Wk.e/i 局部提取公法线，避免章节标题 OCR 和全文顺序扫描带来的错位。
+    wk_pairs = extract_value_pairs_near_label(text, 'Wk.e/i', 3, ['[dMWk.m]', '[MrK.e/i]'])
+    if len(wk_pairs) >= 1:
+        sun_gear['公法线长度_Wmax'] = wk_pairs[0][0]
+        sun_gear['公法线长度_Wmin'] = wk_pairs[0][1]
+    if len(wk_pairs) >= 2:
+        planet_gear['公法线长度_Wmax'] = wk_pairs[1][0]
+        planet_gear['公法线长度_Wmin'] = wk_pairs[1][1]
+    if len(wk_pairs) >= 3:
+        ring_gear['公法线长度_Wmax'] = wk_pairs[2][0]
+        ring_gear['公法线长度_Wmin'] = wk_pairs[2][1]
+
+    # 处理 HAC 高度处的齿厚偏差对 [sc.e/i]
+    # PDF 中通常会连续出现三行 [sc.e/i]，分别对应太阳轮、行星轮、齿圈
+    sc_matches = re.findall(r'\[sc\.e/i\].*?([\d.]+)\s*/\s*([\d.]+)', text, re.IGNORECASE | re.DOTALL)
+    if len(sc_matches) >= 3:
+        sun_gear['hac高度处齿厚_e'] = sc_matches[0][0]
+        sun_gear['hac高度处齿厚_i'] = sc_matches[0][1]
+        planet_gear['hac高度处齿厚_e'] = sc_matches[1][0]
+        planet_gear['hac高度处齿厚_i'] = sc_matches[1][1]
+        ring_gear['hac高度处齿厚_e'] = sc_matches[2][0]
+        ring_gear['hac高度处齿厚_i'] = sc_matches[2][1]
 
     # 处理齿顶圆公差带
     da_pattern = r'\[da\.e/i\].*?([\d.]+)\s+/\s+([\d.]+)'
@@ -234,6 +337,12 @@ def extract_gear_parameters_from_pdf(pdf_path):
                 return f"{float(value):.4f}"
             except:
                 return value
+        # HAC 高度处齿厚偏差对按小数 4 位格式化
+        if param_name in ['hac高度处齿厚', 'hac高度处齿厚_e', 'hac高度处齿厚_i']:
+            try:
+                return f"{float(value):.4f}"
+            except:
+                return value
         if param_name in ['压力角', '螺旋角']:
             try:
                 return f"{float(value):.1f}°"
@@ -288,6 +397,9 @@ def extract_gear_parameters_from_pdf(pdf_path):
         # 其它参数单独映射
         others_mapping = {
             '齿顶圆直径': ('da', '齿顶圆直径', 'gear'),
+            'hac高度处齿厚_e': ('sc.e', '弦齿厚', 'gear'),
+            'hac高度处齿厚_i': ('sc.i', '', 'gear'),
+            '齿宽': ('b', '齿宽', 'gear'),
             '数量': ('', '数量', 'gear')
         }
         
@@ -334,11 +446,12 @@ def extract_gear_parameters_from_pdf(pdf_path):
                 gear_params['符号'].append(symbol)
                 gear_params['数值'].append(formatted_value)
 
-        # others_mapping内容插入，顺序为齿顶圆直径、数量
-        for key in ['齿顶圆直径', '数量']:
+        # others_mapping内容插入，顺序为齿顶圆直径、sc.e、sc.i、齿宽、数量
+        for key in ['齿顶圆直径', 'hac高度处齿厚_e', 'hac高度处齿厚_i', '齿宽', '数量']:
             symbol, display_name, _ = others_mapping[key]
             if key in gear_dict:
-                formatted_value = format_value(gear_dict[key], display_name)
+                # 这里使用参数键做格式化判定，避免空显示名（如 sc.i 第二行）丢失格式规则
+                formatted_value = format_value(gear_dict[key], key)
                 gear_params['参数名称'].append(display_name)
                 gear_params['符号'].append(symbol)
                 gear_params['数值'].append(formatted_value)
@@ -379,7 +492,9 @@ def extract_gear_parameters_from_pdf(pdf_path):
     planet_df = rename_columns(planet_data, '行星轮')
     ring_df = rename_columns(ring_data, '齿圈')
     
-    return sun_df, planet_df, ring_df
+    strength_df = create_strength_summary_df(sun_gear, planet_gear, ring_gear)
+
+    return sun_df, planet_df, ring_df, strength_df
 
 def process_all_pdfs(input_dir="./input", output_dir="./excel"):
     """
@@ -406,13 +521,14 @@ def process_all_pdfs(input_dir="./input", output_dir="./excel"):
         
         try:
             print(f"正在处理: {pdf_file}")
-            sun_df, planet_df, ring_df = extract_gear_parameters_from_pdf(pdf_path)
+            sun_df, planet_df, ring_df, strength_df = extract_gear_parameters_from_pdf(pdf_path)
             
             # 保存为Excel文件
             with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
                 sun_df.to_excel(writer, sheet_name='太阳轮', index=False)
                 planet_df.to_excel(writer, sheet_name='行星轮', index=False)
                 ring_df.to_excel(writer, sheet_name='齿圈', index=False)
+                strength_df.to_excel(writer, sheet_name='强度汇总', index=False)
             # ========== 自动列宽与居中设置，详细中文注释 ==========
             from openpyxl.styles import Alignment
             from openpyxl.utils import get_column_letter
