@@ -32,7 +32,7 @@ def extract_strength_triplet(text, aliases, exclude_aliases=None):
 def extract_value_pairs_near_label(text, label, expected_count, end_labels=None):
     """
     以参数标签为锚点截取局部窗口，再提取顺序数对。
-    这样不依赖章节标题 OCR，也能避免全文顺序扫描串读。
+    同时兼容“每组数对各带标签”和“一个标签后连续多组数对”的 PDF 文本。
     """
     anchor_match = re.search(rf'\[{re.escape(label)}\]', text, re.IGNORECASE)
     if not anchor_match:
@@ -47,10 +47,10 @@ def extract_value_pairs_near_label(text, label, expected_count, end_labels=None)
             if candidate_end < end_index:
                 end_index = candidate_end
 
-    section_text = text[start_index:end_index]
+    section_text = text[anchor_match.start():end_index]
 
     pair_pattern = re.compile(
-        rf'\[{re.escape(label)}\].*?([-+]?\d+(?:\.\d+)?)\s*/\s*([-+]?\d+(?:\.\d+)?)',
+        r'([-+]?\d+(?:\.\d+)?)\s*/\s*([-+]?\d+(?:\.\d+)?)',
         re.IGNORECASE | re.DOTALL
     )
     matches = pair_pattern.findall(section_text)
